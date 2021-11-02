@@ -32,14 +32,20 @@ BASE_URL = 'https://splinterlands.com'
 CARDS_DETAILS = json.loads(requests.get(
     'https://api.splinterlands.io/cards/get_details').content)
 PRIORITIZE_QUEST = os.getenv('PRIORITIZE_QUEST').lower() == 'true'
-CLAIM_REWARD_QUEST = os.getenv('PRIORITIZE_QUEST').lower() == 'true'
-CLAIM_REWARD_SEASON = os.getenv('PRIORITIZE_QUEST').lower() == 'true'
+CLAIM_REWARD_QUEST = os.getenv('CLAIM_REWARD_QUEST').lower() == 'true'
+CLAIM_REWARD_SEASON = os.getenv('CLAIM_REWARD_SEASON').lower() == 'true'
 
 # Checks if console arguments passed (override .env)
 if len(sys.argv) > 4:
     USERNAME = sys.argv[1]
     EMAIL = sys.argv[2]
     PASSWORD = sys.argv[3]
+
+
+with open('collection.json') as f:
+    BATTLEBASE = json.load(f)
+    print(datetime.now().strftime("%m/%d/%Y, %H:%M:%S") +
+          ' Status: Loaded Battlebase')
 
 
 def main():
@@ -56,21 +62,27 @@ def main():
               ]
     )
     page = Page(browser, BASE_URL)
+    sleep(3)
+    page.page.goto(BASE_URL)
+
     BATTLES_PLAYED = 0
     BATTLES_WON = 0
 
     browser_life = datetime.now()
     browser_status = True
-    browser_life_allowed = 20
+    browser_life_allowed = 20  # minutes
     while True:
         try:
             # Step 1: Setup Player
             player = User(USERNAME, EMAIL, PASSWORD, PRIORITIZE_QUEST)
-            # Step 2: Attempt to login player (If fails, already logged in)
-            try:
-                page.login(player)
-            except:
-                pass
+            # Step 2: Checks if player is logged in; if not, logs them in
+            if page.check_login_status():
+                # Step 2.1: Attempts to login player
+                if page.login(player) == None:
+                    # If None returned, bad email/pass combo
+                    print(datetime.now().strftime("%m/%d/%Y, %H:%M:%S") +
+                          ' Email/Password combination is incorrect.')
+                    break
             # Step 3: Check if player is already in battle
             if page.battle_status():
                 # Step 3.1: Calculate how long we should wait for ECR to reset
@@ -100,7 +112,7 @@ def main():
             page.enter_card_selection()
             # Step 4.1 Create battle instance with battle details
             battle_details = page.get_battle_details()
-            battle = Battle(player, CARDS_DETAILS, battle_details)
+            battle = Battle(player, CARDS_DETAILS, battle_details, BATTLEBASE)
             # Step 5: Choose deck from battle deck logs
             deck = battle.get_deck()
             # Step 6: Click cards on the page
@@ -113,7 +125,7 @@ def main():
                 BATTLES_WON += 1
             BATTLES_PLAYED += 1
             # Step 9: Attempts to claim rewards
-            if CLAIM_REWARD_QUEST:
+            if CLAIM_REWARD_QUEST and player.quest['claimed'] == None:
                 page.claim_reward('quest')
             if CLAIM_REWARD_SEASON:
                 page.claim_reward('season')
@@ -154,5 +166,4 @@ def main():
 
 
 if __name__ == '__main__':
-    while True:
-        main()
+    main()
